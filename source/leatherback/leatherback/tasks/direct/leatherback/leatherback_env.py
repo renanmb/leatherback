@@ -19,6 +19,7 @@ from .leatherback_env_cfg import LeatherbackEnvCfg
 
 from isaaclab.markers import VisualizationMarkers
 from isaaclab.assets import RigidObjectCollection
+from .cone import CONES_CFG
 
 class LeatherbackEnv(DirectRLEnv):
     cfg: LeatherbackEnvCfg

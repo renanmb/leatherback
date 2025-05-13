@@ -13,7 +13,7 @@ from . import agents
 
 
 gym.register(
-    id="Template-Leatherback-Direct-v0",
+    id="Isaac-Leatherback-Direct-v1",
     entry_point=f"{__name__}.leatherback_env:LeatherbackEnv",
     disable_env_checker=True,
     kwargs={
