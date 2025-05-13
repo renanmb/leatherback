@@ -1,16 +1,12 @@
-# Template for Isaac Lab Projects
+# Template for LeatherBack Project
 
 ## Overview
 
-This project/repository serves as a template for building projects or extensions based on Isaac Lab.
-It allows you to develop in an isolated environment, outside of the core Isaac Lab repository.
+This repository is a template for making the leatherback project.
 
-**Key Features:**
+Add list of content here
 
-- `Isolation` Work outside the core Isaac Lab repository, ensuring that your development efforts remain self-contained.
-- `Flexibility` This template is set up to allow your code to be run as an extension in Omniverse.
 
-**Keywords:** extension, template, isaaclab
 
 ## Installation
 
@@ -21,6 +17,12 @@ It allows you to develop in an isolated environment, outside of the core Isaac L
 
 - Using a python interpreter that has Isaac Lab installed, install the library in editable mode using:
 
+    Activate the conda environment:
+
+    ```bash
+    # use whatever name you have configured
+    conda activate <environment name>
+    ```
     ```bash
     # use 'PATH_TO_isaaclab.sh|bat -p' instead of 'python' if Isaac Lab is not installed in Python venv or conda
     python -m pip install -e source/leatherback
@@ -37,13 +39,20 @@ It allows you to develop in an isolated environment, outside of the core Isaac L
         python scripts/list_envs.py
         ```
 
-    - Running a task:
+    - Training:
 
         ```bash
         # use 'FULL_PATH_TO_isaaclab.sh|bat -p' instead of 'python' if Isaac Lab is not installed in Python venv or conda
-        python scripts/<RL_LIBRARY>/train.py --task=<TASK_NAME>
+        python scripts/skrl/train.py --task Isaac-Leatherback-Direct-v1 --headless
         ```
+    
+    - Running trained model:
 
+        ```bash
+        # use 'FULL_PATH_TO_isaaclab.sh|bat -p' instead of 'python' if Isaac Lab is not installed in Python venv or conda
+        python scripts/skrl/play.py --task Isaac-Leatherback-Direct-v1 --num_envs 32
+        ```
+    
     - Running a task with dummy agents:
 
         These include dummy agents that output zero or random agents. They are useful to ensure that the environments are configured correctly.
@@ -52,13 +61,13 @@ It allows you to develop in an isolated environment, outside of the core Isaac L
 
             ```bash
             # use 'FULL_PATH_TO_isaaclab.sh|bat -p' instead of 'python' if Isaac Lab is not installed in Python venv or conda
-            python scripts/zero_agent.py --task=<TASK_NAME>
+            python scripts/zero_agent.py --task Isaac-Leatherback-Direct-v1 --num_envs 32
             ```
         - Random-action agent
 
             ```bash
             # use 'FULL_PATH_TO_isaaclab.sh|bat -p' instead of 'python' if Isaac Lab is not installed in Python venv or conda
-            python scripts/random_agent.py --task=<TASK_NAME>
+            python scripts/random_agent.py --task Isaac-Leatherback-Direct-v1 --num_envs 32
             ```
 
 ### Set up IDE (Optional)
