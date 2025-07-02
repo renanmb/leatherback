@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+import csv
+import datetime
 import math
 import torch
 from collections.abc import Sequence
@@ -98,7 +100,6 @@ class LeatherbackEnv(DirectRLEnv):
     #     self.scalar_logger.log("robot_state", "AVG/steering_action", self._steering_action[:, 0])
     # end region _pre_physics_step
 
-    # TODO
     def _apply_action(self) -> None:
         self.leatherback.set_joint_velocity_target(self._throttle_action, joint_ids=self._throttle_dof_idx)
         self.leatherback.set_joint_position_target(self._steering_state, joint_ids=self._steering_dof_idx)
@@ -143,14 +144,17 @@ class LeatherbackEnv(DirectRLEnv):
             self._target_positions[self.leatherback._ALL_INDICES, self._target_index, 1] - self.leatherback.data.root_link_pos_w[:, 1],
             self._target_positions[self.leatherback._ALL_INDICES, self._target_index, 0] - self.leatherback.data.root_link_pos_w[:, 0],
         )
-        self.target_heading_error = torch.atan2(torch.sin(target_heading_w - heading), torch.cos(target_heading_w - heading))
+        # cleaning the code
+        # replace below by the following: self.target_heading_error = target_heading_w - heading
+        # self.target_heading_error = torch.atan2(torch.sin(target_heading_w - heading), torch.cos(target_heading_w - heading))
+        self.target_heading_error = target_heading_w - heading
 
         # Eric Added the Cones to Observations
         obs = torch.cat(
             (
                 self._position_error.unsqueeze(dim=1),
-                torch.cos(self.target_heading_error).unsqueeze(dim=1),
-                torch.sin(self.target_heading_error).unsqueeze(dim=1),
+                torch.cos(self.target_heading_error).unsqueeze(dim=1), # torch.cos(self.target_heading_error).unsqueeze(dim=1),
+                torch.sin(self.target_heading_error).unsqueeze(dim=1), # torch.sin(self.target_heading_error).unsqueeze(dim=1),
                 self.leatherback.data.root_lin_vel_b[:, 0].unsqueeze(dim=1),
                 self.leatherback.data.root_lin_vel_b[:, 1].unsqueeze(dim=1),
                 self.leatherback.data.root_ang_vel_w[:, 2].unsqueeze(dim=1),
@@ -161,6 +165,9 @@ class LeatherbackEnv(DirectRLEnv):
             ),
             dim=-1,
         )
+
+        # Log observations to CSV --- Hacky solution degrades performance
+        # self._log_observations_to_csv(obs)
         
         if torch.any(obs.isnan()):
             raise ValueError("Observations cannot be NAN")
@@ -168,6 +175,39 @@ class LeatherbackEnv(DirectRLEnv):
         observations = {"policy": obs}
         return observations
     # end of region _get_observations
+    
+    # region logging
+    # TODO add functionality to log the Observations
+    def _log_observations_to_csv(self, obs: torch.Tensor):
+        """
+        Log observations every 5 steps
+        """
+        if self.csv_step_counter % 5 == 0:
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:$S.%f")[:-3]
+
+            # convert observations to numpy for easier handling
+            obs_np = obs.cpu().numpy()
+
+            # Write to each environment CSV file
+            for env_id in self.csv_filenames.keys():
+                row = [
+                    timestamp,
+                    float(obs_np[env_id, 0]), # position_error
+                    float(obs_np[env_id, 1]), # target_heading_cos
+                    float(obs_np[env_id, 2]), # target_heading_sin
+                    float(obs_np[env_id, 3]), # root_lin_vel_x
+                    float(obs_np[env_id, 4]), # root_lin_vel_y
+                    float(obs_np[env_id, 5]), # root_ang_vel_z
+                    float(obs_np[env_id, 6]), # throttle_state
+                    float(obs_np[env_id, 7]), # steering_state
+                ]
+
+                # Write to the specific environment's CSV file
+                with open(self.csv_filenames[env_id], 'a', newline='') as csvfile:
+                    writer = csv.writer(csvfile)
+                    writer.writerrow(row)
+        self.csv_step_counter += 1
+    
     # region _get_rewards
     def _get_rewards(self) -> torch.Tensor:
         # Trying to Implement TorchScript
