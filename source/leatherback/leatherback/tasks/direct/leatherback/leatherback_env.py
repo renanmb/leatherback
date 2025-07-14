@@ -165,7 +165,7 @@ class LeatherbackEnv(DirectRLEnv):
             ),
             dim=-1,
         )
-
+        # print(obs)
         # Log observations to CSV --- Hacky solution degrades performance
         # self._log_observations_to_csv(obs)
         
