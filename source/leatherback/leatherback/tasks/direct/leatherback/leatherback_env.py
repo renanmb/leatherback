@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import csv
 import datetime
+
 import math
 import torch
 from collections.abc import Sequence
@@ -61,8 +62,21 @@ class LeatherbackEnv(DirectRLEnv):
         self.Waypoints = VisualizationMarkers(self.cfg.waypoint_cfg)
         self.cones = RigidObjectCollection(self.cfg.cone_collection_cfg) # AttributeError: 'RigidObjectCollection' object has no attribute '_data'. Did you mean: 'data'?
         self.object_state = []
-
-        spawn_ground_plane(prim_path="/World/ground", cfg=GroundPlaneCfg())
+        # Playing with the Ground planes
+        spawn_ground_plane(
+            prim_path="/World/ground", 
+            cfg=GroundPlaneCfg(
+                size=(500.0, 500.0),  # Much larger ground plane (500m x 500m)
+                color=(0.2, 0.2, 0.2),  # Dark gray color
+                physics_material=sim_utils.RigidBodyMaterialCfg(
+                    friction_combine_mode="multiply",
+                    restitution_combine_mode="multiply",
+                    static_friction=1.0,
+                    dynamic_friction=1.0,
+                    restitution=0.0,
+                ),
+            ),
+        )
 
         # clone, filter and replicate
         self.scene.clone_environments(copy_from_source=False) # Clones child environments from parent environment
@@ -79,20 +93,22 @@ class LeatherbackEnv(DirectRLEnv):
 
     # region _pre_physics_step
     def _pre_physics_step(self, actions: torch.Tensor) -> None:
-        """Multiplier for the throttle velocity. The action is in the range [-1, 1] and the radius of the wheel is 0.06m"""
-        throttle_scale = 1 # when set to 2 it trains but the cars are flying, 3 you get NaNs
+        """
+        Multiplier for the throttle velocity.
+        Multiplier for the steering position. 
+        The actions should be in the range [-1, 1] and the radius of the wheel is 0.06m"""
+        throttle_scale = 10 # when set to 2 it trains but the cars are flying, 3 you get NaNs
         throttle_max = 50.0 # throttle_max = 60.0
-        """Multiplier for the steering position. The action is in the range [-1, 1]"""
         steering_scale = 0.1 # steering_scale = math.pi / 4.0
         steering_max = 0.75
 
         self._throttle_action = actions[:, 0].repeat_interleave(4).reshape((-1, 4)) * throttle_scale
-        self._throttle_action += self._throttle_state 
+        # self._throttle_action += self._throttle_state 
         self.throttle_action = torch.clamp(self._throttle_action, -throttle_max, throttle_max * 0.1) # negative goes forward and positive goes backward
         self._throttle_state = self._throttle_action
         
         self._steering_action = actions[:, 1].repeat_interleave(2).reshape((-1, 2)) * steering_scale
-        self._steering_action += self._steering_state
+        # self._steering_action += self._steering_state
         self._steering_action = torch.clamp(self._steering_action, -steering_max, steering_max)
         self._steering_state = self._steering_action
     #     # Log data
@@ -103,27 +119,6 @@ class LeatherbackEnv(DirectRLEnv):
     def _apply_action(self) -> None:
         self.leatherback.set_joint_velocity_target(self._throttle_action, joint_ids=self._throttle_dof_idx)
         self.leatherback.set_joint_position_target(self._steering_state, joint_ids=self._steering_dof_idx)
-
-    def quaternion_multiply(self, q1: torch.Tensor, q2: torch.Tensor) -> torch.Tensor:
-        """
-        Compute the element-wise quaternion multiplication of two batches of quaternions.
-
-        Args:
-            q1 (torch.Tensor): Tensor of shape [N, 4] representing N quaternions.
-            q2 (torch.Tensor): Tensor of shape [N, 4] representing N quaternions.
-
-        Returns:
-        torch.Tensor: Tensor of shape [N, 4] representing the resulting quaternions.
-        """
-        w1, x1, y1, z1 = q1.unbind(dim=1)
-        w2, x2, y2, z2 = q2.unbind(dim=1)
-
-        w = w1 * w2 - x1 * x2 - y1 * y2 - z1 * z2
-        x = w1 * x2 + x1 * w2 + y1 * z2 - z1 * y2
-        y = w1 * y2 - x1 * z2 + y1 * w2 + z1 * x2
-        z = w1 * z2 + x1 * y2 - y1 * x2 + z1 * w2
-
-        return torch.stack([w, x, y, z], dim=1)
     
     # region _get_observations
     def _get_observations(self) -> dict:
@@ -133,10 +128,6 @@ class LeatherbackEnv(DirectRLEnv):
         self._position_error_vector = current_target_positions - self.leatherback.data.root_pos_w[:, :2]
         self._previous_position_error = self._position_error.clone()
         self._position_error = torch.norm(self._position_error_vector, dim=-1) # had placed dim=1
-
-        # region Cones
-        # cone positions
-        # current_cone_positions = self.cone_positions[self.leatherback._ALL_INDICES, self._target_index]
 
         # heading error
         heading = self.leatherback.data.heading_w
@@ -160,8 +151,6 @@ class LeatherbackEnv(DirectRLEnv):
                 self.leatherback.data.root_ang_vel_w[:, 2].unsqueeze(dim=1),
                 self._throttle_state[:, 0].unsqueeze(dim=1),
                 self._steering_state[:, 0].unsqueeze(dim=1),
-                # current_cone_positions[:, 0].unsqueeze(dim=1),
-                # current_cone_positions[:, 1].unsqueeze(dim=1),
             ),
             dim=-1,
         )
@@ -310,13 +299,31 @@ class LeatherbackEnv(DirectRLEnv):
 
         # The idea is to add the self.cone_positions to the self.object_state with the correct Cone position for each Cone in the ENV
         # Pad the tensor to have 3 dimensions by adding a column of zeros for the third dimension (z)
-        padded_cone_positions = torch.cat((self.cone_positions, torch.zeros(self.cone_positions.shape[0], self.cone_positions.shape[1], 1, device=self.cone_positions.device)), dim=2)
+        # padded_cone_positions = torch.cat((self.cone_positions, 
+        #     torch.zeros(
+        #         self.cone_positions.shape[0], 
+        #         self.cone_positions.shape[1], 
+        #         1, 
+        #         device=self.cone_positions.device
+        #         )
+        #     ), dim=2)
+        
+        # Instead of zeroes controlling the Z value it resets the cones
+        z_value = 0.0
+        batch_size, num_cones, _ = self.cone_positions.shape
+
+        # Create a tensor filled with z_value
+        z_vals = torch.full(
+            (batch_size, num_cones, 1), 
+            fill_value=z_value, 
+            device=self.cone_positions.device
+        )
+        padded_cone_positions = torch.cat((self.cone_positions, z_vals), dim=2)
         self.object_state[env_ids, :, :3] = padded_cone_positions
+        # print(self.object_state)
         print(f"env_ids before function call: {env_ids}, type: {type(env_ids)}, device: {env_ids.device if isinstance(env_ids, torch.Tensor) else 'CPU'}")
         self.cones.write_object_link_pose_to_sim(self.object_state[env_ids, :, :7], env_ids, object_ids) # Set the object pose over selected environment and object indices into the simulation.
 
-        # region position error and position dist
-        # make sure the position error and position dist are up to date after the reset
         # reset positions error
         current_target_positions = self._target_positions[self.leatherback._ALL_INDICES, self._target_index]
         self._position_error_vector = current_target_positions[:, :2] - self.leatherback.data.root_pos_w[:, :2]

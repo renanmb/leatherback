@@ -13,7 +13,8 @@ a more user-friendly way.
 """Launch Isaac Sim Simulator first."""
 
 import argparse
-
+import onnxruntime as rt
+import numpy as np
 from isaaclab.app import AppLauncher
 
 # add argparse arguments
@@ -166,6 +167,15 @@ def main():
     experiment_cfg["trainer"]["close_environment_at_exit"] = False
     experiment_cfg["agent"]["experiment"]["write_interval"] = 0  # don't log to TensorBoard
     experiment_cfg["agent"]["experiment"]["checkpoint_interval"] = 0  # don't generate checkpoints
+    
+    # region load policy
+    script_dir = os.path.dirname(__file__)
+    policy_path = os.path.join(script_dir, "../../logs/skrl/leatherback_direct/2025-05-16_17-42-54_ppo_torch/checkpoints/exported/policy_agent.onnx")
+    session = rt.InferenceSession(policy_path)
+    input_names = session.get_inputs()[0].name
+    output_names = [output.name for output in session.get_outputs()]
+    
+    # remove SKRL
     runner = Runner(env, experiment_cfg)
 
     print(f"[INFO] Loading model checkpoint from: {resume_path}")
@@ -175,24 +185,24 @@ def main():
 
     # TODO amazing thigns go here
     # region ONNX stuff
-    is_recurrent = runner.agent._rnn
-    multi_agent = isinstance(env, MultiAgentEnvWrapper)
-    policy_nn = runner.agent.policies if multi_agent else runner.agent.policy
-    possible_agents = env.possible_agents if multi_agent else ["agent"]
-    for agent_id in possible_agents:
-        if hasattr(runner.obs_normalizer, "policy"):
-            normalizer = runner.obs_normalizer[agent_id]["policy"]
-        else:
-            normalizer = runner.obs_normalizer[agent_id]
-        # export policy to onnx/jit
-        export_model_dir = os.path.join(os.path.dirname(resume_path), "exported")
-        export_policy_as_onnx(
-            is_recurrent,
-            policy_nn, # policy_nn
-            normalizer=runner.obs_normalizer, 
-            path=export_model_dir, 
-            filename=f"policy_{agent_id}.onnx"
-        )
+    # is_recurrent = runner.agent._rnn
+    # multi_agent = isinstance(env, MultiAgentEnvWrapper)
+    # policy_nn = runner.agent.policies if multi_agent else runner.agent.policy
+    # possible_agents = env.possible_agents if multi_agent else ["agent"]
+    # for agent_id in possible_agents:
+    #     if hasattr(runner.obs_normalizer, "policy"):
+    #         normalizer = runner.obs_normalizer[agent_id]["policy"]
+    #     else:
+    #         normalizer = runner.obs_normalizer[agent_id]
+    #     # export policy to onnx/jit
+    #     export_model_dir = os.path.join(os.path.dirname(resume_path), "exported")
+    #     export_policy_as_onnx(
+    #         is_recurrent,
+    #         policy_nn, # policy_nn
+    #         normalizer=runner.obs_normalizer, 
+    #         path=export_model_dir, 
+    #         filename=f"policy_{agent_id}.onnx"
+    #     )
     # end of region
 
     # reset environment
@@ -201,21 +211,26 @@ def main():
     # simulate environment
     while simulation_app.is_running():
         start_time = time.time()
-
+        # ONNX inference
+        # obs.astype(np.float32)
+        outputs = session.run(output_names, {input_names: obs.cpu().numpy()})
+        actions = outputs[0]
+        # env stepping
+        obs, _, _, _, _ = env.step(actions)
         # run everything in inference mode
-        with torch.inference_mode():
-            # agent stepping
-            outputs = runner.agent.act(obs, timestep=0, timesteps=0)
-            # - multi-agent (deterministic) actions
-            if hasattr(env, "possible_agents"):
-                actions = {a: outputs[-1][a].get("mean_actions", outputs[0][a]) for a in env.possible_agents}
-            # - single-agent (deterministic) actions
-            else:
-                actions = outputs[-1].get("mean_actions", outputs[0])
-            # env stepping
-            obs, _, _, _, _ = env.step(actions)
-            # print(actions)
-            # print(outputs)
+        # with torch.inference_mode():
+        #     # agent stepping
+        #     outputs = runner.agent.act(obs, timestep=0, timesteps=0)
+        #     # - multi-agent (deterministic) actions
+        #     if hasattr(env, "possible_agents"):
+        #         actions = {a: outputs[-1][a].get("mean_actions", outputs[0][a]) for a in env.possible_agents}
+        #     # - single-agent (deterministic) actions
+        #     else:
+        #         actions = outputs[-1].get("mean_actions", outputs[0])
+        #     # env stepping
+        #     obs, _, _, _, _ = env.step(actions)
+        #     print(actions)
+        #     print(outputs)
         if args_cli.video:
             timestep += 1
             # exit the play loop after recording one video

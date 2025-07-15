@@ -20,7 +20,7 @@ CONES_CFG = RigidObjectCollectionCfg(
                     mass_props=sim_utils.MassPropertiesCfg(mass=1.0),
                     collision_props=sim_utils.CollisionPropertiesCfg(),
                 ),
-                init_state=RigidObjectCfg.InitialStateCfg(pos=(0.5, 0.0, 2.0)),  # Default position
+                init_state=RigidObjectCfg.InitialStateCfg(pos=(0.5, 0.0, 0.3)),  # Default position
         )
         for i in range(20)  # Create 10 cones at different positions
     }
