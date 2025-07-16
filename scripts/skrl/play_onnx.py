@@ -184,7 +184,7 @@ def main():
     runner.agent.set_running_mode("eval")
 
     # TODO amazing thigns go here
-    # region ONNX stuff
+    # region ONNX exporter
     # is_recurrent = runner.agent._rnn
     # multi_agent = isinstance(env, MultiAgentEnvWrapper)
     # policy_nn = runner.agent.policies if multi_agent else runner.agent.policy
@@ -211,24 +211,26 @@ def main():
     # simulate environment
     while simulation_app.is_running():
         start_time = time.time()
-        # ONNX inference
-        # obs.astype(np.float32)
-        outputs = session.run(output_names, {input_names: obs.cpu().numpy()})
-        actions = outputs[0]
         # env stepping
         obs, _, _, _, _ = env.step(actions)
+        # print(env.step(actions))
+
+        # region ONNX inference
+        # obs.astype(np.float32)
+        # outputs = session.run(output_names, {input_names: obs.cpu().numpy()})
+        # actions = outputs[0]
         # run everything in inference mode
-        # with torch.inference_mode():
-        #     # agent stepping
-        #     outputs = runner.agent.act(obs, timestep=0, timesteps=0)
-        #     # - multi-agent (deterministic) actions
-        #     if hasattr(env, "possible_agents"):
-        #         actions = {a: outputs[-1][a].get("mean_actions", outputs[0][a]) for a in env.possible_agents}
-        #     # - single-agent (deterministic) actions
-        #     else:
-        #         actions = outputs[-1].get("mean_actions", outputs[0])
-        #     # env stepping
-        #     obs, _, _, _, _ = env.step(actions)
+        with torch.inference_mode():
+            # agent stepping
+            outputs = runner.agent.act(obs, timestep=0, timesteps=0)
+            # - multi-agent (deterministic) actions
+            if hasattr(env, "possible_agents"):
+                actions = {a: outputs[-1][a].get("mean_actions", outputs[0][a]) for a in env.possible_agents}
+            # - single-agent (deterministic) actions
+            else:
+                actions = outputs[-1].get("mean_actions", outputs[0])
+            # env stepping
+            obs, _, _, _, _ = env.step(actions)
         #     print(actions)
         #     print(outputs)
         if args_cli.video:

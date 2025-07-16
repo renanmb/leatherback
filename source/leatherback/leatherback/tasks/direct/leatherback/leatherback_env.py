@@ -6,7 +6,8 @@
 from __future__ import annotations
 
 import csv
-import datetime
+from datetime import datetime 
+import os
 
 import math
 import torch
@@ -55,6 +56,34 @@ class LeatherbackEnv(DirectRLEnv):
         self.position_progress_weight: float = 1.0
         self.heading_coefficient: float = 0.25
         self.heading_progress_weight: float = 0.05
+
+        # region Logger
+        # Init for Logger
+        # Directory for logs
+        self.csv_log_dir = os.path.join(os.getcwd(), "leatherback_logs")
+        os.makedirs(self.csv_log_dir, exist_ok=True)
+
+        # File names for each environment
+        self.csv_filenames = {i: os.path.join(self.csv_log_dir, f"env_{i}_obs.csv") for i in range(self.num_envs)}
+        self.csv_step_counter = 0
+
+        # Write CSV headers
+        for filename in self.csv_filenames.values():
+            if not os.path.exists(filename):
+                with open(filename, 'w', newline='') as f:
+                    writer = csv.writer(f)
+                    writer.writerow([
+                        "timestamp",
+                        "position_error",
+                        "target_heading_cos",
+                        "target_heading_sin",
+                        "root_lin_vel_x",
+                        "root_lin_vel_y",
+                        "root_ang_vel_z",
+                        "throttle_state",
+                        "steering_state",
+                    ])
+        # end of region Logger
 
     # region Setup Scene
     def _setup_scene(self):
@@ -155,8 +184,9 @@ class LeatherbackEnv(DirectRLEnv):
             dim=-1,
         )
         # print(obs)
+        # TODO add flag to turn logging on/off.
         # Log observations to CSV --- Hacky solution degrades performance
-        # self._log_observations_to_csv(obs)
+        self._log_observations_to_csv(obs)
         
         if torch.any(obs.isnan()):
             raise ValueError("Observations cannot be NAN")
@@ -194,7 +224,7 @@ class LeatherbackEnv(DirectRLEnv):
                 # Write to the specific environment's CSV file
                 with open(self.csv_filenames[env_id], 'a', newline='') as csvfile:
                     writer = csv.writer(csvfile)
-                    writer.writerrow(row)
+                    writer.writerow(row)
         self.csv_step_counter += 1
     
     # region _get_rewards
