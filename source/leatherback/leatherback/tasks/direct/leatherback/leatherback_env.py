@@ -59,6 +59,11 @@ class LeatherbackEnv(DirectRLEnv):
 
         # region Logger
         # Init for Logger
+        # this dont work really well
+        self.enable_csv_logging = True  # Set to False to disable logging
+        # done using the YAML for the env config
+        # self.enable_csv_logging = getattr(self.cfg, "enable_csv_logging", True)
+        # Possibly add a CLI args ?
         # Directory for logs
         self.csv_log_dir = os.path.join(os.getcwd(), "leatherback_logs")
         os.makedirs(self.csv_log_dir, exist_ok=True)
@@ -82,6 +87,8 @@ class LeatherbackEnv(DirectRLEnv):
                         "root_ang_vel_z",
                         "throttle_state",
                         "steering_state",
+                        "action_throttle",
+                        "action_steering",
                     ])
         # end of region Logger
 
@@ -130,7 +137,12 @@ class LeatherbackEnv(DirectRLEnv):
         throttle_max = 50.0 # throttle_max = 60.0
         steering_scale = 0.1 # steering_scale = math.pi / 4.0
         steering_max = 0.75
-
+        # region Logging
+        if self.enable_csv_logging:
+            # Compute observation here temporarily
+            obs = self._get_observations()["policy"]
+            self._log_observations_to_csv(obs, actions)
+        
         self._throttle_action = actions[:, 0].repeat_interleave(4).reshape((-1, 4)) * throttle_scale
         # self._throttle_action += self._throttle_state 
         self.throttle_action = torch.clamp(self._throttle_action, -throttle_max, throttle_max * 0.1) # negative goes forward and positive goes backward
@@ -186,7 +198,8 @@ class LeatherbackEnv(DirectRLEnv):
         # print(obs)
         # TODO add flag to turn logging on/off.
         # Log observations to CSV --- Hacky solution degrades performance
-        self._log_observations_to_csv(obs)
+        # if self.enable_csv_logging:
+        #     self._log_observations_to_csv(obs)
         
         if torch.any(obs.isnan()):
             raise ValueError("Observations cannot be NAN")
@@ -197,7 +210,7 @@ class LeatherbackEnv(DirectRLEnv):
     
     # region logging
     # TODO add functionality to log the Observations
-    def _log_observations_to_csv(self, obs: torch.Tensor):
+    def _log_observations_to_csv(self, obs: torch.Tensor, actions: torch.Tensor):
         """
         Log observations every 5 steps
         """
@@ -219,6 +232,8 @@ class LeatherbackEnv(DirectRLEnv):
                     float(obs_np[env_id, 5]), # root_ang_vel_z
                     float(obs_np[env_id, 6]), # throttle_state
                     float(obs_np[env_id, 7]), # steering_state
+                    float(actions[env_id, 0]), # raw throttle action
+                    float(actions[env_id, 1]), # raw steering action
                 ]
 
                 # Write to the specific environment's CSV file
