@@ -1,5 +1,7 @@
 # Notes from what the exporter is printing
 
+There is a major issue with the process of exporting models as the actions dont match given the same observations
+
 tool to compare models
 
 ```
